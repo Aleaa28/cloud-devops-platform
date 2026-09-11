@@ -3,7 +3,7 @@ import socket
 
 app = FastAPI(
     title="Infrastructure Health API",
-    version="1.0.0"
+    version="1.0.1"
 )
 
 
@@ -11,7 +11,7 @@ app = FastAPI(
 def root():
     return {
         "message": "Infrastructure Health API",
-        "version": "1.0.0"
+        "version": "1.0.1"
     }
 
 
