@@ -11,7 +11,8 @@ on:
 permissions:
   contents: read
   packages: write
-
+env:
+  IMAGE_NAME: ghcr.io/aleaa28/cloud-devops-platform
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -44,11 +45,11 @@ jobs:
       - name: Build Docker image
         run: |
           docker build \
-            -t ghcr.io/${{ github.repository }}:latest \
-            -t ghcr.io/${{ github.repository }}:${{ github.sha }} \
+            	-t ${{ env.IMAGE_NAME }}:latest \
+		-t ${{ env.IMAGE_NAME }}:${{ github.sha }} \
             .
 
       - name: Push Docker image
         run: |
-          docker push ghcr.io/${{ github.repository }}:latest
-          docker push ghcr.io/${{ github.repository }}:${{ github.sha }}
+          	docker push ${{ env.IMAGE_NAME }}:latest
+		docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
