@@ -3,7 +3,7 @@ replicaCount: 2
 image:
   repository: ghcr.io/aleaa28/cloud-devops-platform
   pullPolicy: IfNotPresent
-  tag: ce17bb3b1207f4ad781dea776f396fb025698519
+  tag: d3ab8bb1b68c852580b6a5bd8b13aaf649d9e783
 
 service:
   type: ClusterIP
