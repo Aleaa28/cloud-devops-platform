@@ -14,6 +14,6 @@ provider "kubernetes" {
 
 resource "kubernetes_namespace" "platform" {
   metadata {
-    name = "platform"
+    name = var.namespace_name
   }
 }
