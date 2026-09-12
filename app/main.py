@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 import socket
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(
     title="Infrastructure Health API",
@@ -29,3 +30,4 @@ def system_info():
         "status": "running",
         "environment": "development"
     }
+Instrumentator().instrument(app).expose(app)
