@@ -266,131 +266,62 @@ Create and activate a Python virtual environment:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-
 Install the project dependencies:
-
-```bash
 pip install -r requirements.txt
 pip install pytest httpx
-
 Run the automated tests:
-
-```bash
 python -m pytest
-
-### Kubernetes Cluster
+Kubernetes Cluster
 Create the local Kubernetes cluster using kind:
-
-```bash
 kind create cluster --name cloud-devops
-
 If the cluster already exists, verify its status with:
-
 kubectl get nodes
-
 The Kubernetes node should be in Ready status.
-
-### Terraform
-
+Terraform
 Initialize Terraform:
-
-```bash
 cd terraform
 terraform init
-
 Review the planned infrastructure changes:
-
-```bash
 terraform plan
-
 Apply the Terraform configuration:
-
-```bash
 terraform apply
-
-Terraform provisions the Kubernetes infrastructure defined in the project, including the platform namespace.
-
+Terraform manages the Kubernetes infrastructure defined in the Terraform configuration, currently provisioning the platform namespace.
 Return to the project root:
-
-```bash
 cd ..
-
-### Validate the Helm Chart
-
 Validate the Helm Chart
-
 The Helm chart can be validated locally with:
-
-```bash
 helm lint helm/infrastructure-health-api
-
 The chart is deployed through Argo CD as part of the GitOps workflow.
-
-###Argo CD Deployment
-
+Argo CD Deployment
 The Argo CD application definition is located at:
-
-```bash
 argocd/application.yaml
-
-Argo CD uses the Helm chart from the Git repository to deploy and manage the FastAPI application.
-
+Argo CD monitors the Git repository and uses the Helm chart to deploy and manage the FastAPI application.
 The application status can be checked with:
-
-```bash
 kubectl get applications -n argocd
-
 The application should eventually report:
-
 Synced
 Healthy
-
-###Verify Kubernetes Resources
-
+Verify Kubernetes Resources
 Check the application pods:
-
-```bash
 kubectl get pods
-
 Check the Kubernetes services:
-
-```bash
 kubectl get services
-
 The FastAPI application should run with two replicas.
-
-### Access the Application
-
+Access the Application
 The application can be accessed locally through the Nginx reverse proxy:
-
-```bash
 kubectl port-forward service/nginx-reverse-proxy 8081:80
-
 Then open:
-
 http://localhost:8081
-
 The Nginx reverse proxy forwards requests to the FastAPI application running inside the Kubernetes cluster.
-
-###GitOps Self-Healing
-
+GitOps Self-Healing
 Argo CD is configured with automated synchronization, pruning, and self-healing.
-
 When the Kubernetes state is manually changed, Argo CD detects the difference between the live cluster and the desired state stored in Git and automatically reconciles the resource.
-
 For example, scaling the application deployment manually:
-
-```bash
 kubectl scale deployment infrastructure-health-api --replicas=1
-
 causes Argo CD to reconcile the deployment back to the desired replica count of 2.
-
 This demonstrates GitOps-based self-healing and declarative Kubernetes management.
-
-##Validation
-
+Validation
 The project has been validated through multiple layers:
-
 Automated API tests with Pytest
 Docker image build through GitHub Actions
 Docker image publishing to GHCR
@@ -405,13 +336,9 @@ Grafana dashboard visualization
 Grafana alerting
 Nginx reverse proxy routing
 Terraform infrastructure provisioning
-
 The application was also verified with two running API replicas and Kubernetes health checks.
-
-##Project Goals
-
+Project Goals
 The project was developed as a practical demonstration of Cloud and DevOps engineering skills, with emphasis on:
-
 Containerization
 Kubernetes
 GitOps
@@ -422,9 +349,7 @@ Application reliability
 Declarative infrastructure management
 Automated health monitoring
 Infrastructure troubleshooting
-
-##Future Improvements
-
+Future Improvements
 Possible future improvements include:
 Kubernetes Horizontal Pod Autoscaling
 Ingress configuration
@@ -434,11 +359,7 @@ Additional Prometheus alerts
 Centralized log aggregation
 Deployment to a managed cloud Kubernetes service
 Automated deployment promotion between environments
-
 These items represent potential extensions of the current platform and are not presented as currently implemented features.
-
-##Conclusion
-
+Conclusion
 This project demonstrates an end-to-end Cloud and DevOps workflow, from application development and automated testing to containerization, Kubernetes deployment, GitOps reconciliation, Infrastructure as Code, monitoring, and alerting.
-
-The implementation focuses on practical automation, reliability, observability, and reproducible infrastructure rather than application complexity
+The implementation focuses on practical automation, reliability, observability, and reproducible infrastructure rather than application complexity.
