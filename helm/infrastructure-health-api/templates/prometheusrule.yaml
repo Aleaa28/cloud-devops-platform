@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "infrastructure-health-api.fullname" . }}-alerts
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: infrastructure-health-api
+      rules:
+        - alert: InfrastructureHealthAPILowAvailability
+          expr: kube_deployment_status_replicas_ready{deployment="infrastructure-health-api", namespace="{{ .Release.Namespace }}"} < 2
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Infrastructure Health API has low availability"
+            description: "Fewer than 2 replicas of the Infrastructure Health API are ready."
