@@ -1,447 +1,150 @@
-# Cloud DevOps Platform
+# cloud-devops-platform
 
-A cloud-native infrastructure health monitoring platform built to demonstrate modern DevOps, containerization, Kubernetes, GitOps, Infrastructure as Code, CI/CD, and observability practices.
+A small FastAPI service that I used as a vehicle to build a complete DevOps workflow from scratch: tests and image builds in CI, deployment with Helm and Argo CD on a local Kubernetes cluster, a bit of Terraform, and monitoring with Prometheus and Grafana.
 
-## Overview
+The app is intentionally trivial. The interesting part is everything around it.
 
-This project implements a containerized FastAPI application that exposes infrastructure health endpoints and Prometheus metrics.
+Everything runs locally on a [kind](https://kind.sigs.k8s.io/) cluster. Nothing here is deployed to a cloud provider.
 
-The application is automatically tested and built through GitHub Actions, published as a Docker image to GitHub Container Registry (GHCR), and deployed to Kubernetes using Helm and Argo CD.
+## The app
 
-Infrastructure resources are managed with Terraform, while Nginx is used as a reverse proxy and Prometheus and Grafana provide monitoring, visualization, and alerting.
+| Endpoint      | What it returns                                   |
+|---------------|---------------------------------------------------|
+| `/`           | App name and version                              |
+| `/health`     | `{"status": "healthy"}`, used by the k8s probes   |
+| `/api/system` | Hostname of the pod that answered, plus a status  |
+| `/metrics`    | Prometheus metrics (via `prometheus-fastapi-instrumentator`) |
 
-## Architecture
+`/api/system` returns the pod hostname on purpose, so you can see requests being spread across the two replicas.
 
-The platform follows a GitOps-based deployment workflow:
-
-```
-Developer
-    │
-    ▼
-GitHub Repository
-    │
-    ▼
-GitHub Actions
-(Test → Build → Push Docker Image)
-    │
-    ▼
-GitHub Container Registry (GHCR)
-    │
-    ▼
-Argo CD
-    │
-    ▼
-Kubernetes
-    │
-    ├── FastAPI Application
-    │       │
-    │       ▼
-    │   Prometheus Metrics
-    │
-    └── Nginx Reverse Proxy
-
-
-Kubernetes → Prometheus → Grafana Dashboard & Alerting
-
-Terraform → Infrastructure Provisioning
-```
-
-## Tech Stack
-
-**Application**
-- Python 3.11
-- FastAPI
-- Uvicorn
-
-**Containerization & CI/CD**
-- Docker
-- GitHub Actions
-- GitHub Container Registry (GHCR)
-
-**Kubernetes & GitOps**
-- Kubernetes
-- Helm
-- Argo CD
-- Nginx
-- kind
-
-**Infrastructure as Code**
-- Terraform
-- Terraform Kubernetes Provider
-
-**Observability**
-- Prometheus
-- Grafana
-- Prometheus FastAPI Instrumentator
-
-## CI/CD Pipeline
-
-The project uses GitHub Actions to automate testing and Docker image builds.
-
-The workflow runs on pushes to the main branch and on pull requests.
-
-For each workflow run:
-
-1. The repository is checked out.
-2. Python dependencies are installed.
-3. Automated API tests are executed with Pytest.
-4. A Docker image is built.
-
-On pushes to the main branch, the Docker image is published to GitHub Container Registry (GHCR).
-
-Argo CD continuously monitors the Git repository and reconciles the Kubernetes environment with the desired state defined in Git and Helm.
-
-## Kubernetes & GitOps
-
-The application is deployed on a local Kubernetes cluster using kind.
-
-Helm is used to package and configure the application deployment, including:
-
-- 2 application replicas
-- Readiness and liveness probes
-- CPU and memory requests and limits
-- Kubernetes Service configuration
-- Prometheus ServiceMonitor configuration
-
-Argo CD manages the application deployment using a GitOps approach. The desired Kubernetes state is stored in the Git repository and continuously reconciled by Argo CD.
-
-Automated synchronization, pruning, and self-healing are enabled, allowing the cluster to automatically return to the desired state defined in Git.
-
-## Infrastructure as Code
-
-Terraform is used to provision and manage Kubernetes infrastructure through the Terraform Kubernetes Provider.
-
-In this project, Terraform manages the platform Kubernetes namespace, demonstrating Infrastructure as Code and declarative infrastructure management.
-
-## Observability
-
-The application exposes Prometheus metrics through the FastAPI Prometheus Instrumentator.
-
-Prometheus collects application and Kubernetes metrics, while Grafana is used for visualization and alerting.
-
-The custom Grafana dashboard includes:
-
-- HTTP request rate
-- HTTP error rate
-- 95th percentile request latency
-- Number of ready API pods
-
-A Grafana alert is configured to detect when fewer than 2 API pods are ready, helping demonstrate basic Kubernetes availability monitoring and alerting.
-
-## Project Structure
+## How it fits together
 
 ```
-cloud-devops-platform/
-├── app/
-│   ├── __init__.py
-│   └── main.py
-│
-├── tests/
-│   └── test_api.py
-│
-├── .github/
-│   └── workflows/
-│       └── ci.yml
-│
-├── helm/
-│   └── infrastructure-health-api/
-│       ├── templates/
-│       │   ├── deployment.yaml
-│       │   ├── service.yaml
-│       │   ├── servicemonitor.yaml
-│       │   └── _helpers.tpl
-│       ├── Chart.yaml
-│       ├── values.yaml
-│       └── .helmignore
-│
-├── k8s/
-│   ├── deployment.yaml
-│   ├── service.yaml
-│   └── nginx/
-│       ├── deployment.yaml
-│       └── service.yaml
-│
-├── nginx/
-│   ├── Dockerfile
-│   └── nginx.conf
-│
-├── argocd/
-│   ├── application.yaml
-│   └── nginx-application.yaml
-│
-├── terraform/
-│   ├── main.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   └── .terraform.lock.hcl
-│
-├── Dockerfile
-├── requirements.txt
-├── .dockerignore
-├── .gitignore
-└── README.md
+git push to main
+   └─> GitHub Actions: pytest -> docker build -> push to GHCR (tags: latest + commit SHA)
+
+Git repo (helm/ and k8s/nginx/)
+   └─> Argo CD (auto-sync, prune, self-heal)
+          └─> kind cluster
+                ├─ infrastructure-health-api  (2 replicas, Helm chart)
+                ├─ nginx-reverse-proxy        (plain manifests)
+                └─ Prometheus + Grafana       (kube-prometheus-stack)
 ```
 
-## Application Endpoints
+- **CI** (`.github/workflows/ci.yml`): installs dependencies, runs the tests, builds the image, and on pushes to `main` publishes it to GitHub Container Registry.
+- **Helm chart** (`helm/infrastructure-health-api`): Deployment (2 replicas, readiness/liveness probes on `/health`, CPU and memory requests/limits), Service, ServiceMonitor, PrometheusRule and a Grafana dashboard ConfigMap.
+- **Argo CD** (`argocd/`): two Applications, one for the Helm chart and one for the nginx manifests in `k8s/nginx`. Both have automated sync, pruning and self-heal enabled.
+- **Nginx** (`nginx/`, `k8s/nginx/`): a reverse proxy in front of the API service.
+- **Terraform** (`terraform/`): uses the Kubernetes provider to create a `platform` namespace. It is a small example, not a full infrastructure setup.
 
-The FastAPI application exposes the following endpoints:
+## Monitoring
 
-| Endpoint | Description |
-|----------|-------------|
-| `/` | Application information |
-| `/health` | Health check endpoint |
-| `/api/system` | Basic system information |
-| `/metrics` | Prometheus metrics |
+Prometheus scrapes `/metrics` through the ServiceMonitor in the chart. The chart also ships:
 
-## Deployment Workflow
+- **A Grafana dashboard** (`helm/.../dashboards/infrastructure-health.json`) with four panels: request rate, error rate (4xx/5xx), p95 latency, and ready replicas. It is loaded through a ConfigMap labelled `grafana_dashboard: "1"`, which the Grafana sidecar picks up.
+- **A Prometheus alert rule** (`templates/prometheusrule.yaml`): `InfrastructureHealthAPILowAvailability` fires when fewer than 2 replicas have been ready for 2 minutes. It uses the `kube_deployment_status_replicas_ready` metric from kube-state-metrics.
 
-The deployment workflow follows a GitOps-based approach:
+No notification receiver (email, Slack) is configured, so the alert only shows up in Prometheus/Alertmanager.
+
+<!--
+Add screenshots here once you have them, for example:
+![Argo CD apps synced and healthy](docs/argocd.png)
+![Grafana dashboard](docs/grafana.png)
+-->
+
+## Repository layout
 
 ```
-Code Change
-    │
-    ▼
-GitHub
-    │
-    ▼
-GitHub Actions
-    │
-    ├── Run Tests
-    └── Build Docker Image
-            │
-            ▼
-          GHCR
-            │
-            ▼
-      Git-defined State
-            │
-            ▼
-         Argo CD
-            │
-            ▼
-      Helm Deployment
-            │
-            ▼
-       Kubernetes
+app/                        FastAPI application
+tests/                      Pytest tests for the endpoints
+Dockerfile                  API image (python:3.11-slim)
+nginx/                      nginx.conf and Dockerfile for the reverse proxy
+helm/infrastructure-health-api/   Helm chart (see above)
+k8s/nginx/                  Nginx Deployment and Service, deployed by Argo CD
+k8s/deployment.yaml, service.yaml   My first plain-manifest version of the API,
+                            before I moved to Helm. Not deployed any more.
+argocd/                     Argo CD Application definitions
+terraform/                  Namespace via the Kubernetes provider
+.github/workflows/ci.yml    CI pipeline
 ```
 
-Argo CD continuously reconciles the Kubernetes environment against the desired configuration stored in Git.
+## Running it locally
 
-## Running the Project Locally
+You need Docker, kubectl, kind, Helm, Terraform and Python 3.11+.
 
-### Prerequisites
-
-The following tools are required:
-
-- Docker Desktop
-- Git
-- Python 3.11+
-- kubectl
-- kind
-- Helm
-- Terraform
-
-### Run the Tests
-
-Create and activate a Python virtual environment:
+**Tests**
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-Install the project dependencies:
-
-```bash
-pip install -r requirements.txt
-pip install pytest httpx
-```
-
-Run the automated tests:
-
-```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt pytest httpx
 python -m pytest
 ```
 
-### Kubernetes Cluster
-
-Create the local Kubernetes cluster using kind:
+**Cluster and namespace**
 
 ```bash
 kind create cluster --name cloud-devops
+cd terraform && terraform init && terraform apply && cd ..
 ```
 
-If the cluster already exists, verify its status with:
+**Argo CD**
 
 ```bash
-kubectl get nodes
+kubectl create namespace argocd
+kubectl apply -n argocd --server-side -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 ```
 
-The Kubernetes node should be in `Ready` status.
+**Prometheus and Grafana**
 
-### Terraform
-
-Initialize Terraform:
+The release name matters: the ServiceMonitor and PrometheusRule carry the label `release: monitoring`, so the stack must be installed as `monitoring`.
 
 ```bash
-cd terraform
-terraform init
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring --create-namespace
 ```
 
-Review the planned infrastructure changes:
+**Nginx image**
+
+The nginx image is built locally and loaded into kind (the manifest uses `imagePullPolicy: Never`):
 
 ```bash
-terraform plan
+docker build -t cloud-devops-nginx:latest ./nginx
+kind load docker-image cloud-devops-nginx:latest --name cloud-devops
 ```
 
-Apply the Terraform configuration:
+**Deploy the apps through Argo CD**
 
 ```bash
-terraform apply
+kubectl apply -f argocd/application.yaml -f argocd/nginx-application.yaml
+kubectl get applications -n argocd     # wait for Synced / Healthy
 ```
 
-Terraform manages the Kubernetes infrastructure defined in the Terraform configuration, currently provisioning the `platform` namespace.
-
-Return to the project root:
-
-```bash
-cd ..
-```
-
-### Validate the Helm Chart
-
-The Helm chart can be validated locally with:
-
-```bash
-helm lint helm/infrastructure-health-api
-```
-
-The chart is deployed through Argo CD as part of the GitOps workflow.
-
-### Argo CD Deployment
-
-The Argo CD application definition is located at:
-
-```
-argocd/application.yaml
-```
-
-Argo CD monitors the Git repository and uses the Helm chart to deploy and manage the FastAPI application.
-
-The application status can be checked with:
-
-```bash
-kubectl get applications -n argocd
-```
-
-The application should eventually report:
-
-- `Synced`
-- `Healthy`
-
-### Verify Kubernetes Resources
-
-Check the application pods:
-
-```bash
-kubectl get pods
-```
-
-Check the Kubernetes services:
-
-```bash
-kubectl get services
-```
-
-The FastAPI application should run with two replicas.
-
-### Access the Application
-
-The application can be accessed locally through the Nginx reverse proxy:
+**Try it**
 
 ```bash
 kubectl port-forward service/nginx-reverse-proxy 8081:80
+curl localhost:8081/api/system          # the hostname is the pod that answered
 ```
 
-Then open:
+Grafana:
 
+```bash
+kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80
 ```
-http://localhost:8081
-```
 
-The Nginx reverse proxy forwards requests to the FastAPI application running inside the Kubernetes cluster.
-
-### GitOps Self-Healing
-
-Argo CD is configured with automated synchronization, pruning, and self-healing.
-
-When the Kubernetes state is manually changed, Argo CD detects the difference between the live cluster and the desired state stored in Git and automatically reconciles the resource.
-
-For example, scaling the application deployment manually:
+**Self-healing demo**
 
 ```bash
 kubectl scale deployment infrastructure-health-api --replicas=1
+kubectl get pods -w
 ```
 
-causes Argo CD to reconcile the deployment back to the desired replica count of 2.
+Argo CD notices the drift from what is in Git and scales it back to 2.
 
-This demonstrates GitOps-based self-healing and declarative Kubernetes management.
+## Known limitations
 
-## Validation
-
-The project has been validated through multiple layers:
-
-- Automated API tests with Pytest
-- Docker image build through GitHub Actions
-- Docker image publishing to GHCR
-- Kubernetes deployment on kind
-- Readiness and liveness health checks
-- Helm chart validation with `helm lint`
-- Argo CD synchronization
-- Argo CD GitOps self-healing
-- Prometheus application metrics collection
-- Prometheus target monitoring
-- Grafana dashboard visualization
-- Grafana alerting
-- Nginx reverse proxy routing
-- Terraform infrastructure provisioning
-
-The application was also verified with two running API replicas and Kubernetes health checks.
-
-## Project Goals
-
-The project was developed as a practical demonstration of Cloud and DevOps engineering skills, with emphasis on:
-
-- Containerization
-- Kubernetes
-- GitOps
-- Infrastructure as Code
-- CI/CD automation
-- Monitoring and observability
-- Application reliability
-- Declarative infrastructure management
-- Automated health monitoring
-- Infrastructure troubleshooting
-
-## Future Improvements
-
-Possible future improvements include:
-
-- Kubernetes Horizontal Pod Autoscaling
-- Ingress configuration
-- Secret management
-- Automated image version updates
-- Additional Prometheus alerts
-- Centralized log aggregation
-- Deployment to a managed cloud Kubernetes service
-- Automated deployment promotion between environments
-
-These items represent potential extensions of the current platform and are not presented as currently implemented features.
-
-## Conclusion
-
-This project demonstrates an end-to-end Cloud and DevOps workflow, from application development and automated testing to containerization, Kubernetes deployment, GitOps reconciliation, Infrastructure as Code, monitoring, and alerting.
-
-The implementation focuses on practical automation, reliability, observability, and reproducible infrastructure rather than application complexity.
-
-
+- **The image tag is bumped by hand.** CI publishes images tagged with the commit SHA, but `image.tag` in `values.yaml` is pinned manually. I originally used `latest` and it did not work with GitOps (with `IfNotPresent` the cluster never pulled the new image), which is why the tag is pinned. Automating this (CI updating the tag, or Argo CD Image Updater) is the next step.
+- **The nginx image is not built in CI.** It only exists on my machine and in the kind cluster, so a fresh clone needs the manual build step above.
+- **Terraform only manages a namespace,** with local state. A real setup would use a remote backend and manage more than this.
+- **Argo CD, Prometheus and Grafana are installed manually,** not from this repo.
+- **Local only.** Moving to a managed cluster (AKS, EKS, GKE) would also need an Ingress, proper secret handling and probably an HPA.
